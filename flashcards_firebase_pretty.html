@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>FlashCards</title>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
+  <style>
+    :root {
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --text: #1e2430;
+      --muted: #667085;
+      --line: #dbe2ea;
+      --accent: #2563eb;
+      --accent-2: #1d4ed8;
+      --danger: #dc2626;
+      --success: #16a34a;
+      --shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: linear-gradient(180deg, #eef3ff 0%, var(--bg) 32%);
+      color: var(--text);
+    }
+
+    .app {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 18px 16px 28px;
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 18px;
+    }
+
+    h1 {
+      font-size: clamp(26px, 4vw, 40px);
+      margin: 0;
+      letter-spacing: -0.03em;
+    }
+
+    .subtitle {
+      color: var(--muted);
+      margin-top: 4px;
+      font-size: 14px;
+    }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 1.15fr 0.95fr;
+      gap: 18px;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid rgba(219, 226, 234, 0.9);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 16px;
+    }
+
+    .section-title {
+      margin: 0 0 12px;
+      font-size: 18px;
+      font-weight: 700;
+    }
+
+    .study-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+      color: var(--muted);
+      font-size: 14px;
+      flex-wrap: wrap;
+    }
+
+    .flashcard-wrap {
+      perspective: 1200px;
+    }
+
+    .flashcard {
+      position: relative;
+      width: 100%;
+      min-height: 420px;
+      border-radius: 24px;
+      transform-style: preserve-3d;
+      transition: transform 0.72s cubic-bezier(.2,.8,.2,1);
+      cursor: pointer;
+      user-select: none;
+    }
+
+    .flashcard.flipped {
+      transform: rotateY(180deg);
+    }
+
+    .face {
+      position: absolute;
+      inset: 0;
+      backface-visibility: hidden;
+      border-radius: 24px;
+      padding: 22px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      overflow: hidden;
+      border: 1px solid var(--line);
+    }
+
+    .front {
+      background: linear-gradient(135deg, #ffffff 0%, #f7fbff 100%);
+    }
+
+    .back {
+      background: linear-gradient(135deg, #f8fbff 0%, #eef5ff 100%);
+      transform: rotateY(180deg);
+      justify-content: flex-start;
+      padding-top: 26px;
+    }
+
+    .badge {
+      align-self: flex-start;
+      background: rgba(37, 99, 235, 0.10);
+      color: var(--accent-2);
+      border: 1px solid rgba(37, 99, 235, 0.14);
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 18px;
+    }
+
+    .word {
+      font-size: clamp(30px, 5vw, 52px);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      word-break: break-word;
+    }
+
+    .hint {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .back h3 {
+      margin: 0 0 8px;
+      font-size: 15px;
+      color: var(--muted);
+      align-self: flex-start;
+    }
+
+    .translation {
+      font-size: clamp(24px, 4vw, 38px);
+      font-weight: 800;
+      margin-bottom: 14px;
+      align-self: flex-start;
+      text-align: left;
+      width: 100%;
+      word-break: break-word;
+    }
+
+    .meaning {
+      font-size: 16px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      text-align: left;
+      width: 100%;
+      margin-bottom: 16px;
+      word-break: break-word;
+    }
+
+    .card-image {
+      width: 100%;
+      max-height: 190px;
+      object-fit: contain;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      margin-top: auto;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-top: 14px;
+    }
+
+    button,
+    .button-like,
+    label.file-btn {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 12px;
+      padding: 11px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: 0.18s ease;
+      text-align: center;
+    }
+
+    button:hover,
+    .button-like:hover,
+    label.file-btn:hover {
+      transform: translateY(-1px);
+      border-color: #c6d0dd;
+    }
+
+    .primary {
+      background: var(--accent);
+      color: #fff;
+      border-color: transparent;
+    }
+
+    .primary:hover {
+      background: var(--accent-2);
+    }
+
+    .danger {
+      color: var(--danger);
+      border-color: rgba(220, 38, 38, 0.2);
+      background: rgba(220, 38, 38, 0.03);
+    }
+
+    .success {
+      color: var(--success);
+      border-color: rgba(22, 163, 74, 0.2);
+      background: rgba(22, 163, 74, 0.04);
+    }
+
+    .form-grid {
+      display: grid;
+      gap: 12px;
+    }
+
+    .field {
+      display: grid;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    input[type="text"],
+    textarea,
+    input[type="search"] {
+      width: 100%;
+      padding: 12px 14px;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      font: inherit;
+      color: var(--text);
+      background: #fff;
+    }
+
+    textarea {
+      min-height: 96px;
+      resize: vertical;
+    }
+
+    .muted {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input[type="file"] {
+      display: none;
+    }
+
+    .preview {
+      width: 100%;
+      max-height: 180px;
+      object-fit: contain;
+      border-radius: 12px;
+      border: 1px solid var(--line);
+      background: #fff;
+      display: none;
+      margin-top: 6px;
+    }
+
+    .list-toolbar {
+      display: flex;
+      gap: 8px;
+      margin: 16px 0 10px;
+      flex-wrap: wrap;
+    }
+
+    .cards-list {
+      display: grid;
+      gap: 10px;
+      max-height: 520px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+
+    .card-row {
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+      background: #fff;
+    }
+
+    .card-row-top {
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .card-row-title {
+      font-weight: 800;
+      font-size: 16px;
+      word-break: break-word;
+    }
+
+    .card-row-sub {
+      color: var(--muted);
+      font-size: 14px;
+      word-break: break-word;
+      margin-top: 2px;
+    }
+
+    .mini-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .tiny {
+      padding: 8px 10px;
+      border-radius: 10px;
+      font-size: 13px;
+    }
+
+    .empty {
+      padding: 24px 12px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed var(--line);
+      border-radius: 14px;
+    }
+
+    .footer-note {
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .flashcard {
+        min-height: 360px;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .app {
+        padding: 14px 12px 24px;
+      }
+      .panel {
+        padding: 14px;
+      }
+      .controls {
+        grid-template-columns: repeat(2, 1fr);
+      }
+      .flashcard {
+        min-height: 320px;
+      }
+      .face {
+        padding: 18px;
+      }
+      .actions {
+        width: 100%;
+      }
+      .actions > * {
+        flex: 1 1 auto;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <div class="topbar">
+      <div>
+        <h1>FlashCards</h1>
+        <div class="subtitle">Общая колода слов: можно открыть по ссылке на MacBook, iPhone и у других людей.</div>
+        <div class="subtitle" id="storageStatus" style="margin-top:6px;">Подключение: инициализация…</div>
+      </div>
+      <div class="actions">
+
+        <input id="deckIdInput" type="text" placeholder="ID колоды" style="min-width:180px;max-width:220px;" />
+        <button id="openDeckBtn">Открыть колоду</button>
+        <button id="newDeckBtn">Новая колода</button>
+        <button id="copyLinkBtn" class="primary">Скопировать ссылку</button>
+        <button id="exportBtn" class="success">Экспорт JSON</button>
+        <label class="file-btn" for="importInput">Импорт JSON</label>
+        <input id="importInput" type="file" accept="application/json" />
+      </div>
+    </div>
+
+    <div class="layout">
+      <section class="panel">
+        <h2 class="section-title">Режим изучения</h2>
+        <div class="study-meta">
+          <div id="studyCounter">0 карточек</div>
+          <div id="studyMode">Нажми на карточку, чтобы начать</div>
+        </div>
+
+        <div class="flashcard-wrap">
+          <div class="flashcard" id="studyCard" role="button" tabindex="0" aria-label="Карточка для изучения">
+            <div class="face front">
+              <div class="badge">Лицевая сторона</div>
+              <div class="word" id="frontWord">Добавь первую карточку</div>
+              <div class="hint">Первый клик — переворот. Второй клик — следующая карточка.</div>
+            </div>
+            <div class="face back">
+              <div class="badge">Обратная сторона</div>
+              <h3>Перевод</h3>
+              <div class="translation" id="backTranslation">Здесь появится перевод</div>
+              <h3>Значение / заметки</h3>
+              <div class="meaning" id="backMeaning">А здесь — значение слова, примеры или пояснения.</div>
+              <img id="backImage" class="card-image" alt="Изображение карточки" style="display:none;" />
+            </div>
+          </div>
+        </div>
+
+        <div class="controls">
+          <button id="prevBtn">← Назад</button>
+          <button id="flipBtn">Перевернуть</button>
+          <button id="nextBtn" class="primary">Следующая</button>
+          <button id="shuffleBtn">Перемешать</button>
+        </div>
+
+        <div class="footer-note">
+          Карточки теперь синхронизируются через Firebase в общей колоде по ссылке. Картинки можно хранить прямо в карточке, но лучше не использовать слишком тяжёлые файлы.
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="section-title" id="formTitle">Создать карточку</h2>
+        <form id="cardForm" class="form-grid">
+          <div class="field">
+            <label for="wordInput">Слово</label>
+            <input id="wordInput" type="text" placeholder="Например: resilient" required />
+          </div>
+
+          <div class="field">
+            <label for="translationInput">Перевод</label>
+            <input id="translationInput" type="text" placeholder="Например: устойчивый" required />
+          </div>
+
+          <div class="field">
+            <label for="meaningInput">Значение / пояснение</label>
+            <textarea id="meaningInput" placeholder="Например: способный быстро восстанавливаться после трудностей"></textarea>
+          </div>
+
+          <div class="field">
+            <label>Картинка</label>
+            <label class="file-btn" for="imageInput">Выбрать изображение</label>
+            <input id="imageInput" type="file" accept="image/*" />
+            <img id="imagePreview" class="preview" alt="Предпросмотр" />
+            <div class="muted">Изображение хранится внутри карточки. Лучше выбирать не слишком тяжёлые файлы.</div>
+          </div>
+
+          <div class="actions">
+            <button type="submit" class="primary" id="saveBtn">Сохранить карточку</button>
+            <button type="button" id="cancelEditBtn" style="display:none;">Отменить редактирование</button>
+            <button type="button" id="clearImageBtn" class="danger">Убрать картинку</button>
+          </div>
+        </form>
+
+        <div class="list-toolbar">
+          <input id="searchInput" type="search" placeholder="Поиск по слову или переводу" />
+        </div>
+
+        <div id="cardsList" class="cards-list"></div>
+      </section>
+    </div>
+  </div>
+
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyDbahbFtAXs0YI1OOHAOgDJ4_o4vAZNvTA",
+      authDomain: "lessons-7cfce.firebaseapp.com",
+      projectId: "lessons-7cfce",
+      storageBucket: "lessons-7cfce.firebasestorage.app",
+      messagingSenderId: "378123246527",
+      appId: "1:378123246527:web:41d3c3a5b0357ef07a1f0a",
+      measurementId: "G-M93J5XRXPL"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    const studyCard = document.getElementById('studyCard');
+    const frontWord = document.getElementById('frontWord');
+    const backTranslation = document.getElementById('backTranslation');
+    const backMeaning = document.getElementById('backMeaning');
+    const backImage = document.getElementById('backImage');
+    const studyCounter = document.getElementById('studyCounter');
+    const studyMode = document.getElementById('studyMode');
+
+    const prevBtn = document.getElementById('prevBtn');
+    const flipBtn = document.getElementById('flipBtn');
+    const nextBtn = document.getElementById('nextBtn');
+    const shuffleBtn = document.getElementById('shuffleBtn');
+
+    const cardForm = document.getElementById('cardForm');
+    const formTitle = document.getElementById('formTitle');
+    const wordInput = document.getElementById('wordInput');
+    const translationInput = document.getElementById('translationInput');
+    const meaningInput = document.getElementById('meaningInput');
+    const imageInput = document.getElementById('imageInput');
+    const imagePreview = document.getElementById('imagePreview');
+    const saveBtn = document.getElementById('saveBtn');
+    const cancelEditBtn = document.getElementById('cancelEditBtn');
+    const clearImageBtn = document.getElementById('clearImageBtn');
+    const searchInput = document.getElementById('searchInput');
+    const cardsList = document.getElementById('cardsList');
+    const exportBtn = document.getElementById('exportBtn');
+    const importInput = document.getElementById('importInput');
+    const storageStatus = document.getElementById('storageStatus');
+
+    const deckIdInput = document.getElementById('deckIdInput');
+    const openDeckBtn = document.getElementById('openDeckBtn');
+    const newDeckBtn = document.getElementById('newDeckBtn');
+    const copyLinkBtn = document.getElementById('copyLinkBtn');
+
+    let cards = [];
+    let currentIndex = 0;
+    let isFlipped = false;
+    let editingId = null;
+    let pendingImage = null;
+    let currentDeckId = '';
+    let unsubscribeCards = null;
+
+    function uid() {
+      return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    }
+
+    function makeDeckId() {
+      return Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 6);
+    }
+
+    function escapeHtml(text) {
+      return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    function truncate(text, max = 120) {
+      if (!text) return '';
+      return text.length > max ? text.slice(0, max).trim() + '…' : text;
+    }
+
+    function sanitizeCard(card) {
+      return {
+        id: String(card.id || uid()),
+        word: String(card.word || '').trim(),
+        translation: String(card.translation || '').trim(),
+        meaning: String(card.meaning || '').trim(),
+        image: typeof card.image === 'string' ? card.image : '',
+        createdAt: typeof card.createdAt === 'number' ? card.createdAt : Date.now()
+      };
+    }
+
+    function cardsRef() {
+      return db.collection('decks').doc(currentDeckId).collection('cards');
+    }
+
+    function updateStatus(text) {
+      storageStatus.textContent = text;
+    }
+
+    function updateUrl() {
+      const url = new URL(window.location.href);
+      url.searchParams.set('deck', currentDeckId);
+      history.replaceState({}, '', url.toString());
+    }
+
+    function getDeckLink() {
+      const url = new URL(window.location.href);
+      url.searchParams.set('deck', currentDeckId);
+      return url.toString();
+    }
+
+    async function copyDeckLink() {
+      const link = getDeckLink();
+      try {
+        await navigator.clipboard.writeText(link);
+        copyLinkBtn.textContent = 'Ссылка скопирована';
+        setTimeout(() => copyLinkBtn.textContent = 'Скопировать ссылку', 1600);
+      } catch {
+        prompt('Скопируй ссылку вручную:', link);
+      }
+    }
+
+    function renderStudyCard() {
+      if (!cards.length) {
+        frontWord.textContent = 'Добавь первую карточку';
+        backTranslation.textContent = 'Здесь появится перевод';
+        backMeaning.textContent = 'А здесь — значение слова, примеры или пояснения.';
+        backImage.style.display = 'none';
+        backImage.src = '';
+        studyCounter.textContent = '0 карточек';
+        studyMode.textContent = currentDeckId ? `Колода: ${currentDeckId}` : 'Сначала открой колоду';
+        studyCard.classList.remove('flipped');
+        isFlipped = false;
+        return;
+      }
+
+      if (currentIndex < 0) currentIndex = 0;
+      if (currentIndex >= cards.length) currentIndex = 0;
+
+      const card = cards[currentIndex];
+      frontWord.textContent = card.word || 'Без слова';
+      backTranslation.textContent = card.translation || '—';
+      backMeaning.textContent = card.meaning || 'Без дополнительного описания';
+
+      if (card.image) {
+        backImage.src = card.image;
+        backImage.style.display = 'block';
+      } else {
+        backImage.src = '';
+        backImage.style.display = 'none';
+      }
+
+      studyCounter.textContent = `${currentIndex + 1} / ${cards.length}`;
+      studyMode.textContent = isFlipped
+        ? `Колода ${currentDeckId}: ещё один клик — следующая карточка`
+        : `Колода ${currentDeckId}: кликни, чтобы перевернуть карточку`;
+
+      studyCard.classList.toggle('flipped', isFlipped);
+    }
+
+    function renderCardsList() {
+      const q = searchInput.value.trim().toLowerCase();
+      const filtered = cards.filter(card => {
+        const hay = `${card.word} ${card.translation} ${card.meaning}`.toLowerCase();
+        return hay.includes(q);
+      });
+
+      if (!filtered.length) {
+        cardsList.innerHTML = `<div class="empty">${cards.length ? 'По запросу ничего не найдено.' : 'Карточек пока нет. Создай первую справа.'}</div>`;
+        return;
+      }
+
+      cardsList.innerHTML = filtered.map(card => `
+        <div class="card-row">
+          <div class="card-row-top">
+            <div>
+              <div class="card-row-title">${escapeHtml(card.word || 'Без слова')}</div>
+              <div class="card-row-sub">${escapeHtml(card.translation || 'Без перевода')}</div>
+            </div>
+            <div class="mini-actions">
+              <button class="tiny" onclick="startStudyFrom('${card.id}')">Учить</button>
+              <button class="tiny" onclick="editCard('${card.id}')">Редактировать</button>
+              <button class="tiny danger" onclick="deleteCard('${card.id}')">Удалить</button>
+            </div>
+          </div>
+          ${card.meaning ? `<div class="muted">${escapeHtml(truncate(card.meaning))}</div>` : ''}
+        </div>
+      `).join('');
+    }
+
+    function resetForm() {
+      editingId = null;
+      pendingImage = null;
+      cardForm.reset();
+      imagePreview.src = '';
+      imagePreview.style.display = 'none';
+      formTitle.textContent = 'Создать карточку';
+      saveBtn.textContent = 'Сохранить карточку';
+      cancelEditBtn.style.display = 'none';
+      imageInput.value = '';
+    }
+
+    function editCard(id) {
+      const card = cards.find(c => c.id === id);
+      if (!card) return;
+      editingId = id;
+      wordInput.value = card.word;
+      translationInput.value = card.translation;
+      meaningInput.value = card.meaning;
+      pendingImage = card.image || null;
+      if (pendingImage) {
+        imagePreview.src = pendingImage;
+        imagePreview.style.display = 'block';
+      } else {
+        imagePreview.src = '';
+        imagePreview.style.display = 'none';
+      }
+      formTitle.textContent = 'Редактировать карточку';
+      saveBtn.textContent = 'Сохранить изменения';
+      cancelEditBtn.style.display = 'inline-block';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    async function deleteCard(id) {
+      const card = cards.find(c => c.id === id);
+      if (!card) return;
+      const ok = confirm(`Удалить карточку «${card.word}»?`);
+      if (!ok) return;
+      await cardsRef().doc(id).delete();
+      if (editingId === id) resetForm();
+    }
+
+    function startStudyFrom(id) {
+      const index = cards.findIndex(c => c.id === id);
+      if (index === -1) return;
+      currentIndex = index;
+      isFlipped = false;
+      renderStudyCard();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function nextCard() {
+      if (!cards.length) return;
+      currentIndex = (currentIndex + 1) % cards.length;
+      isFlipped = false;
+      renderStudyCard();
+    }
+
+    function prevCard() {
+      if (!cards.length) return;
+      currentIndex = (currentIndex - 1 + cards.length) % cards.length;
+      isFlipped = false;
+      renderStudyCard();
+    }
+
+    function flipCard() {
+      if (!cards.length) return;
+      isFlipped = !isFlipped;
+      renderStudyCard();
+    }
+
+    function handleStudyClick() {
+      if (!cards.length) return;
+      if (!isFlipped) {
+        isFlipped = true;
+      } else {
+        currentIndex = (currentIndex + 1) % cards.length;
+        isFlipped = false;
+      }
+      renderStudyCard();
+    }
+
+    function shuffleCards() {
+      if (cards.length < 2) return;
+      for (let i = cards.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [cards[i], cards[j]] = [cards[j], cards[i]];
+      }
+      currentIndex = 0;
+      isFlipped = false;
+      renderStudyCard();
+      renderCardsList();
+    }
+
+    function subscribeToDeck(deckId) {
+      currentDeckId = deckId;
+      deckIdInput.value = deckId;
+      updateUrl();
+      if (unsubscribeCards) unsubscribeCards();
+      updateStatus(`Подключение: загружается колода ${deckId}…`);
+
+      unsubscribeCards = cardsRef()
+        .orderBy('createdAt', 'asc')
+        .onSnapshot((snapshot) => {
+          const prevCurrentId = cards[currentIndex]?.id || null;
+          cards = snapshot.docs.map(doc => sanitizeCard(doc.data()));
+          if (prevCurrentId) {
+            const idx = cards.findIndex(c => c.id === prevCurrentId);
+            currentIndex = idx >= 0 ? idx : 0;
+          } else if (currentIndex >= cards.length) {
+            currentIndex = 0;
+          }
+          isFlipped = false;
+          renderStudyCard();
+          renderCardsList();
+          updateStatus(`Синхронизация: общая колода ${deckId}`);
+        }, (error) => {
+          console.error(error);
+          updateStatus('Ошибка доступа к Firebase. Проверь Firestore и правила.');
+          alert('Не удалось подключиться к базе. Проверь, что Firestore включён в test mode.');
+        });
+    }
+
+    async function openDeck(idFromInput) {
+      const deckId = String(idFromInput || '').trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+      if (!deckId) {
+        alert('Введи ID колоды.');
+        return;
+      }
+      subscribeToDeck(deckId);
+    }
+
+    function initDeckFromUrl() {
+      const deckFromUrl = new URL(window.location.href).searchParams.get('deck');
+      subscribeToDeck(deckFromUrl ? deckFromUrl : 'my-deck');
+    }
+
+    cardForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!currentDeckId) {
+        alert('Сначала открой колоду.');
+        return;
+      }
+
+      const card = sanitizeCard({
+        id: editingId || uid(),
+        word: wordInput.value,
+        translation: translationInput.value,
+        meaning: meaningInput.value,
+        image: pendingImage || '',
+        createdAt: editingId ? (cards.find(c => c.id === editingId)?.createdAt || Date.now()) : Date.now()
+      });
+
+      if (!card.word || !card.translation) {
+        alert('Нужно заполнить хотя бы слово и перевод.');
+        return;
+      }
+
+      await cardsRef().doc(card.id).set(card);
+      resetForm();
+    });
+
+    imageInput.addEventListener('change', (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        alert('Нужно выбрать изображение.');
+        return;
+      }
+      if (file.size > 800 * 1024) {
+        alert('Лучше выбрать изображение до 800 КБ, иначе запись может не сохраниться.');
+        imageInput.value = '';
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        pendingImage = reader.result;
+        imagePreview.src = pendingImage;
+        imagePreview.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    });
+
+    clearImageBtn.addEventListener('click', () => {
+      pendingImage = null;
+      imageInput.value = '';
+      imagePreview.src = '';
+      imagePreview.style.display = 'none';
+    });
+
+    cancelEditBtn.addEventListener('click', resetForm);
+    searchInput.addEventListener('input', renderCardsList);
+
+    studyCard.addEventListener('click', handleStudyClick);
+    studyCard.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        handleStudyClick();
+      }
+    });
+
+    prevBtn.addEventListener('click', prevCard);
+    flipBtn.addEventListener('click', flipCard);
+    nextBtn.addEventListener('click', nextCard);
+    shuffleBtn.addEventListener('click', shuffleCards);
+
+    openDeckBtn.addEventListener('click', () => openDeck(deckIdInput.value));
+    newDeckBtn.addEventListener('click', () => subscribeToDeck(makeDeckId()));
+    copyLinkBtn.addEventListener('click', copyDeckLink);
+
+    exportBtn.addEventListener('click', () => {
+      const payload = {
+        deckId: currentDeckId,
+        exportedAt: new Date().toISOString(),
+        cards
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${currentDeckId || 'flashcards'}-backup.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    importInput.addEventListener('change', async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        const importedRaw = Array.isArray(parsed) ? parsed : parsed.cards;
+        if (!Array.isArray(importedRaw)) throw new Error('Некорректный формат');
+        const imported = importedRaw.map(sanitizeCard).filter(c => c.word || c.translation || c.meaning || c.image);
+        const ok = confirm(`Импорт добавит ${imported.length} карточек в текущую колоду. Продолжить?`);
+        if (!ok) return;
+        for (const card of imported) {
+          await cardsRef().doc(card.id).set(card);
+        }
+        alert('Импорт завершён.');
+      } catch (error) {
+        console.error(error);
+        alert('Не удалось импортировать файл. Проверь формат JSON.');
+      } finally {
+        importInput.value = '';
+      }
+    });
+
+    deckIdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        openDeck(deckIdInput.value);
+      }
+    });
+
+    initDeckFromUrl();
+
+    window.editCard = editCard;
+    window.deleteCard = deleteCard;
+    window.startStudyFrom = startStudyFrom;
+  </script>
+
+</body>
+</html>
